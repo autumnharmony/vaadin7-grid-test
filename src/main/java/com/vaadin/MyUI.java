@@ -11,21 +11,24 @@ import com.vaadin.server.VaadinServlet;
 import com.vaadin.ui.*;
 import org.apache.commons.collections.MapUtils;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * This UI is the application entry point. A UI may either represent a browser window 
+ * This UI is the application entry point. A UI may either represent a browser window
  * (or tab) or some part of a html page where a Vaadin application is embedded.
  * <p>
- * The UI is initialized using {@link #init(VaadinRequest)}. This method is intended to be 
+ * The UI is initialized using {@link #init(VaadinRequest)}. This method is intended to be
  * overridden to add component to the user interface and initialize non-component functionality.
  */
 @Theme("mytheme")
 public class MyUI extends UI {
 
 
-    class Node<T> {
+    Map<Object, Row> idToRow = new HashMap<>();
+
+    class Node<T> implements Serializable{
         T data;
         Set<Node<T>> children = new HashSet<>();
 
@@ -44,12 +47,25 @@ public class MyUI extends UI {
         public boolean hasChildren() {
             return !children.isEmpty();
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Node<?> node = (Node<?>) o;
+            return data.equals(node.data);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(data);
+        }
     }
 
-
-    class Tree<T> {
+    class Tree<T> implements Serializable {
 
         Map<T, Node<T>> nodeMap = new HashMap<>();
+        Set<Node<T>> roots = new HashSet<>();
 
         public boolean hasChildren(T item) {
             return nodeMap.get(item).hasChildren();
@@ -57,11 +73,8 @@ public class MyUI extends UI {
 
         public Collection<T> getChildren(T item) {
             Collection<Node<T>> children = nodeMap.get(item).getChildren();
-            return children.stream().map(node->node.data).collect(Collectors.toList());
+            return children.stream().map(node -> node.data).collect(Collectors.toList());
         }
-
-
-        Set<Node<T>> roots = new HashSet<>();
 
         public Tree(Set<Node<T>> roots) {
             this.roots.addAll(roots);
@@ -80,27 +93,53 @@ public class MyUI extends UI {
             nodeMap.get(row).addChild(node);
             nodeMap.put(not_root, node);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Tree<?> tree = (Tree<?>) o;
+            return Objects.equals(nodeMap, tree.nodeMap) &&
+                    Objects.equals(roots, tree.roots);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(nodeMap, roots);
+        }
     }
 
     public class Row {
         String first;
-        String second;
+        Integer second;
 
         public String getFirst() {
             return first;
         }
 
-        public String getSecond() {
+        public Integer getSecond() {
             return second;
         }
 
-        public Row(String first, String second) {
+        public Row(String first, Integer second) {
             this.first = first;
             this.second = second;
         }
-    }
 
-    Map<Object, Row> idToRow = new HashMap<>();
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Row row = (Row) o;
+            return Objects.equals(first, row.first) &&
+                    Objects.equals(second, row.second);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(first, second);
+        }
+    }
 
 
     @Override
@@ -113,18 +152,19 @@ public class MyUI extends UI {
         Grid grid = createGrid(tree, tree.roots.stream().map(node -> node.data).toArray(size -> new Row[size]));
 
         for (Node<Row> node : tree.roots) {
-            Object itemId = grid.addRow(node.data.first, node.data.second);
+            Object itemId = grid.addRow(node.data.first, String.valueOf(node.data.second));
             idToRow.put(itemId, node.data);
         }
 
         layout.addComponents(grid);
         layout.setMargin(true);
         layout.setSpacing(true);
-        
+        layout.setHeight("100%");
+
         setContent(layout);
     }
 
-    Grid createGrid(Tree<Row> rowTree, Row ... roots) {
+    Grid createGrid(Tree<Row> rowTree, Row... roots) {
         Grid.DetailsGenerator detailsGen = (Grid.DetailsGenerator) rowReference -> {
             Row item = idToRow.get(rowReference.getItemId());
             if (rowTree.hasChildren(item)) {
@@ -146,7 +186,7 @@ public class MyUI extends UI {
             }
         });
         for (Row row : roots) {
-            Object itemId = grid.addRow(row.first, row.second);
+            Object itemId = grid.addRow(row.first, String.valueOf(row.second));
             idToRow.put(itemId, row);
             grid.setDetailsVisible(itemId, true);
         }
@@ -177,8 +217,9 @@ public class MyUI extends UI {
             }
         });
 
-        rowTree.getChildren(row).forEach(r-> {
-            Object itemId = grid.addRow(r.first, r.second);
+        rowTree.getChildren(row).forEach(r -> {
+            Object itemId = grid.addRow(r.first, String.valueOf(r.second));
+            idToRow.put(itemId, r);
             grid.setDetailsVisible(itemId, true);
         });
         return grid;
@@ -186,31 +227,32 @@ public class MyUI extends UI {
 
 
     private Tree<Row> createTree() {
-        Row row = new Row("Root", "1");
-        Row row2 = new Row("Root", "2");
-        Row row3 = new Row("Root", "3");
+        Row rot = new Row("Root", 1);
+        Row root = new Row("Root", 1);
+        Row rooot = new Row("Root", 1);
 
         HashSet<Node<Row>> roots = new HashSet<>();
-        roots.add(new Node<>(row));
-        roots.add(new Node<>(row2));
-        roots.add(new Node<>(row3));
+        roots.add(new Node<>(rot));
+        roots.add(new Node<>(root));
+        roots.add(new Node<>(rooot));
 
         Tree<Row> rowTree = new Tree<>(roots);
-        Row not_root2 = new Row("Not root", "4");
-        rowTree.addChild(row, not_root2);
-        rowTree.addChild(row, new Row("Not root", "5"));
 
-        rowTree.addChild(not_root2, new Row("QWEASD", "55"));
-        rowTree.addChild(not_root2, new Row("ASDZXC", "66"));
-        rowTree.addChild(not_root2, new Row("ZXCASD", "77"));
+        Row row = new Row("QQ", 2);
+        rowTree.addChild(rot, row);
+        rowTree.addChild(rot, new Row("QW", 2));
 
-        Row not_root = new Row("Not root", "6");
-        Row not_root1 = new Row("Not root", "7");
-        rowTree.addChild(row2, not_root);
-        rowTree.addChild(row2, not_root1);
+        rowTree.addChild(row, new Row("QWEASD", 3));
+        rowTree.addChild(row, new Row("ASDZXC", 3));
+        rowTree.addChild(row, new Row("ZXCASD", 3));
 
-        rowTree.addChild(not_root, new Row("Not root", "8"));
-        rowTree.addChild(not_root1, new Row("Not root", "9"));
+        Row qwe = new Row("ZXC", 2);
+        Row asd = new Row("CXZ", 2);
+        rowTree.addChild(root, qwe);
+        rowTree.addChild(root, asd);
+
+        rowTree.addChild(qwe, new Row("ZZZ", 3));
+        rowTree.addChild(asd, new Row("CCC", 3));
         return rowTree;
     }
 
